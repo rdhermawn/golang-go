@@ -1,4 +1,4 @@
-refine-monitor
+/refine-monitor
 golang-refine
 logs/
 *.pid

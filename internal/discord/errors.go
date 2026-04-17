@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"golang-refine/internal/config"
-	"golang-refine/internal/monitor"
 )
 
 type errorEntry struct {
@@ -195,9 +194,7 @@ func StartHourlySummary(cfg *config.Config, done <-chan struct{}) {
 		}
 		if err := sendHourlySummary(cfg.Discord.GetSummaryWebhook(), cfg.Discord.Footer, snapshot); err != nil {
 			fmt.Printf("[ERROR] failed to send hourly error summary: %v\n", err)
-			monitor.LogToFile("[ERROR] failed to send hourly error summary | %v", err)
 			continue
 		}
-		monitor.LogToFile("[OK] sent hourly error summary | total errors=%d", snapshot.TotalCount)
 	}
 }

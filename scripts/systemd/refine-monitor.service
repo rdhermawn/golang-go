@@ -1,0 +1,17 @@
+[Unit]
+Description=Golang Refine Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/golang-go
+Environment=HOME=/root
+Environment=GOPATH=/root/go
+ExecStartPre=/bin/bash /home/golang-go/scripts/build.sh
+ExecStart=/home/golang-go/refine-monitor
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -33,6 +33,13 @@ func OpenLog(now time.Time) error {
 
 func LogToFile(format string, args ...interface{}) {
 	now := time.Now()
+	LogToFileAt(now, format, args...)
+}
+
+func LogToFileAt(now time.Time, format string, args ...interface{}) {
+	if now.IsZero() {
+		now = time.Now()
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	if err := rotateIfNeededLocked(now); err != nil {

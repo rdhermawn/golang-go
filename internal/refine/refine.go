@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
@@ -26,6 +27,8 @@ var (
 
 	itemCache        map[string]string
 	itemDisplayCache map[string]string
+	itemLookupCache  map[string]string
+	itemIDLookup     map[string]string
 )
 
 var (
@@ -84,6 +87,8 @@ type ParsedRefineLine struct {
 func Init() {
 	itemCache = make(map[string]string)
 	itemDisplayCache = make(map[string]string)
+	itemLookupCache = make(map[string]string)
+	itemIDLookup = make(map[string]string)
 	f, err := os.Open(tabFilePath)
 	if err != nil {
 		fmt.Printf("Warning: cannot open %s: %v\n", tabFilePath, err)
@@ -111,6 +116,8 @@ func Init() {
 			}
 			itemCache[columns[0]] = name
 			itemDisplayCache[columns[0]] = displayName
+			registerItemLookup(columns[0], name, displayName)
+			registerItemLookup(columns[0], displayName, displayName)
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -131,6 +138,25 @@ func GetItemDisplayName(itemID string) string {
 		return cached
 	}
 	return GetItemName(itemID)
+}
+
+func NormalizeItemDisplayName(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return trimmed
+	}
+	if display, ok := itemLookupCache[normalizeLookupKey(trimmed)]; ok {
+		return display
+	}
+	return trimmed
+}
+
+func LookupItemIDByName(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return ""
+	}
+	return itemIDLookup[normalizeLookupKey(trimmed)]
 }
 
 func GetStoneEmoticon(stoneID string) string {
@@ -182,12 +208,47 @@ func CalculateLevelAfter(result string, levelBefore int) int {
 
 func BuildRefineLogMessage(playerName, result, itemName string, levelBefore, levelAfter int, stoneID string) string {
 	message := fmt.Sprintf("%s refined %s %s from +%d -> +%d",
-		playerName, strings.ToLower(result), itemName, levelBefore, levelAfter)
+		playerName, strings.ToLower(result), NormalizeItemDisplayName(itemName), levelBefore, levelAfter)
 	stoneName := GetStoneName(stoneID)
 	if stoneName == "" {
 		return message
 	}
 	return fmt.Sprintf("%s using %s", message, stoneName)
+}
+
+func BuildRefineMonitorLogMessage(roleID, playerName, result, itemName string, levelBefore, levelAfter int, stoneID string) string {
+	actor := strings.TrimSpace(playerName)
+	roleID = strings.TrimSpace(roleID)
+	if actor == "" {
+		actor = roleID
+	}
+	if actor == "" {
+		actor = "Unknown Player"
+	}
+	if roleID != "" && actor != roleID {
+		actor = fmt.Sprintf("%s (%s)", actor, roleID)
+	}
+
+	return BuildRefineLogMessage(actor, result, itemName, levelBefore, levelAfter, stoneID)
+}
+
+func registerItemLookup(itemID, name, displayName string) {
+	key := normalizeLookupKey(name)
+	if key == "" {
+		return
+	}
+	if _, exists := itemLookupCache[key]; exists {
+		if _, hasID := itemIDLookup[key]; !hasID {
+			itemIDLookup[key] = itemID
+		}
+		return
+	}
+	itemLookupCache[key] = displayName
+	itemIDLookup[key] = itemID
+}
+
+func normalizeLookupKey(value string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(value)), " "))
 }
 
 func MustAtoi(s string) int {
@@ -262,6 +323,18 @@ func convertToUTF8(data []byte) string {
 		return string(data)
 	}
 	return string(result)
+}
+
+func ParseLineTimestamp(rawLine []byte) (time.Time, bool) {
+	if len(rawLine) < len("2006-01-02 15:04:05") {
+		return time.Time{}, false
+	}
+	timestampText := string(rawLine[:len("2006-01-02 15:04:05")])
+	timestamp, err := time.ParseInLocation("2006-01-02 15:04:05", timestampText, time.Local)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return timestamp, true
 }
 
 func parseCleanRefineLine(line string) (ParsedRefineLine, bool) {

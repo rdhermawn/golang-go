@@ -1,0 +1,247 @@
+:root {
+  color-scheme: dark;
+  --page: #313338;
+  --panel: #2b2d31;
+  --panel-edge: #1e1f22;
+  --text: #dbdee1;
+  --muted: #b5bac1;
+  --neutral: #5865f2;
+  --success: #3ba55d;
+  --failure: #ed4245;
+  --reset: #faa61a;
+  --downgraded: #f23f43;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  font-family: "gg sans", "Noto Sans", "Helvetica Neue", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top, rgba(88, 101, 242, 0.14), transparent 28%),
+    linear-gradient(180deg, #36393f 0%, var(--page) 42%, #232428 100%);
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 24px 16px 40px;
+}
+
+.feed {
+  width: min(720px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 12px;
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field-grow {
+  min-width: 0;
+}
+
+.field-label {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--text);
+  background: rgba(30, 31, 34, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.field input::placeholder {
+  color: var(--muted);
+}
+
+.field input:focus,
+.field select:focus {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px rgba(88, 101, 242, 0.9),
+    0 0 0 3px rgba(88, 101, 242, 0.16);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 2px 0;
+}
+
+.pagination-summary,
+.pagination-page {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pagination-numbers {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pagination button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--text);
+  background: rgba(30, 31, 34, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.pagination button:hover:not(:disabled) {
+  box-shadow:
+    inset 0 0 0 1px rgba(88, 101, 242, 0.9),
+    0 0 0 3px rgba(88, 101, 242, 0.12);
+}
+
+.pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.page-number {
+  min-width: 34px;
+  padding: 0 10px;
+}
+
+.page-number.is-active {
+  background: rgba(88, 101, 242, 0.28);
+  box-shadow:
+    inset 0 0 0 1px rgba(88, 101, 242, 0.95),
+    0 0 0 3px rgba(88, 101, 242, 0.12);
+}
+
+.discord-embed {
+  position: relative;
+  padding: 14px 16px 16px;
+  border-left: 4px solid var(--neutral);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(43, 45, 49, 0.98) 0%, rgba(34, 36, 40, 0.98) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 10px 30px rgba(0, 0, 0, 0.22);
+}
+
+.embed-author-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.embed-author,
+.embed-description {
+  margin: 0;
+}
+
+.embed-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  image-rendering: -webkit-optimize-contrast;
+}
+
+.embed-author {
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.embed-description {
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.embed-neutral {
+  border-left-color: var(--neutral);
+}
+
+.embed-success {
+  border-left-color: var(--success);
+}
+
+.embed-failure {
+  border-left-color: var(--failure);
+}
+
+.embed-reset {
+  border-left-color: var(--reset);
+}
+
+.embed-downgraded {
+  border-left-color: var(--downgraded);
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 16px 10px 28px;
+  }
+
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .pagination {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .discord-embed {
+    padding: 12px 14px 14px;
+  }
+
+  .embed-author {
+    font-size: 0.86rem;
+  }
+
+  .embed-description {
+    font-size: 0.92rem;
+  }
+}

@@ -29,6 +29,8 @@ var Client = &http.Client{
 }
 
 type RefineEvent struct {
+	Sequence      int64
+	ObservedAt    time.Time
 	RoleID        string
 	ItemID        string
 	Result        string
@@ -150,22 +152,24 @@ func sourceFileForDiscordError(err error, event RefineEvent, logFile string) str
 	return monitor.LogPath
 }
 
-func ProcessRefineEvent(roleID, itemID, result string, levelBefore int, stoneID string, lookupRole func(int) (string, error), cfg *config.Config, msgCh chan<- RefineEvent) {
+func BuildRefineEvent(sequence int64, observedAt time.Time, roleID, itemID, result string, levelBefore int, stoneID string, lookupRole func(int) (string, error)) RefineEvent {
 	levelAfter := refine.CalculateLevelAfter(result, levelBefore)
-	if !cfg.Discord.ShouldSend(result, levelBefore, levelAfter) {
-		return
-	}
 
-	playerName := "Unknown Player"
+	playerName := strings.TrimSpace(roleID)
+	if playerName == "" {
+		playerName = "Unknown Player"
+	}
 	if name, err := lookupRole(refine.MustAtoi(roleID)); err == nil && name != "" {
 		playerName = name
 	}
 
-	itemName := refine.GetItemName(itemID)
+	itemName := refine.GetItemDisplayName(itemID)
 	materialDisplay := refine.GetStoneEmoticon(stoneID)
 	iconPath := refine.GetItemIconPath(itemID)
 
 	event := RefineEvent{
+		Sequence:      sequence,
+		ObservedAt:    observedAt,
 		RoleID:        roleID,
 		ItemID:        itemID,
 		Result:        result,
@@ -178,42 +182,59 @@ func ProcessRefineEvent(roleID, itemID, result string, levelBefore int, stoneID 
 		IconPath:      iconPath,
 	}
 
+	return event
+}
+
+func ProcessRefineEvent(event RefineEvent, cfg *config.Config, msgCh chan<- RefineEvent) bool {
+	if !cfg.Discord.ShouldSend(event.Result, event.LevelBefore, event.LevelAfter) {
+		return false
+	}
+
 	fmt.Printf("[SEND] %s **%s** %s **%s** +%d\u2192+%d %s\n",
-		refine.ResultEmojis[result], playerName, result, itemName, levelBefore, levelAfter, materialDisplay)
+		refine.ResultEmojis[event.Result], event.PlayerName, event.Result, event.ItemName, event.LevelBefore, event.LevelAfter, event.StoneEmoticon)
 	msgCh <- event
+	return true
 }
 
 func StartSender(cfg *config.Config, msgCh <-chan RefineEvent) {
+	const maxRateLimitWait = 60 * time.Second
+
 	for event := range msgCh {
 		webhook := cfg.Discord.GetWebhook(event.Result)
-		logMessage := refine.BuildRefineLogMessage(
-			event.PlayerName,
-			event.Result,
-			event.ItemName,
-			event.LevelBefore,
-			event.LevelAfter,
-			event.StoneID,
-		)
-		statusCode, retryAfter, err := SendEmbed(
-			webhook, cfg.Discord.Footer,
-			event.PlayerName, event.Result, event.ItemID, event.ItemName,
-			event.LevelBefore, event.LevelAfter,
-			event.StoneID, event.StoneEmoticon, event.IconPath,
-		)
-		if err != nil {
+		attempt := 1
+		for {
+			statusCode, retryAfter, err := SendEmbed(
+				webhook, cfg.Discord.Footer,
+				event.PlayerName, event.Result, event.ItemID, event.ItemName,
+				event.LevelBefore, event.LevelAfter,
+				event.StoneID, event.StoneEmoticon, event.IconPath,
+			)
+			if err == nil {
+				if attempt > 1 {
+					fmt.Printf("[OK] %s sent to Discord after %d attempts\n", event.Result, attempt)
+				} else {
+					fmt.Printf("[OK] %s sent to Discord\n", event.Result)
+				}
+				break
+			}
+
+			if statusCode == 429 {
+				wait := 2 * time.Second
+				if retryAfter > 0 {
+					wait = time.Duration(retryAfter * float64(time.Second))
+				}
+				if wait > maxRateLimitWait {
+					wait = maxRateLimitWait
+				}
+				fmt.Printf("Rate limited, waiting %.1fs (attempt %d)\n", wait.Seconds(), attempt)
+				time.Sleep(wait)
+				attempt++
+				continue
+			}
+
 			fmt.Printf("[ERROR] %v\n", err)
-			monitor.LogToFile("[ERROR] %s | %v", logMessage, err)
 			RecordError(err.Error(), sourceFileForDiscordError(err, event, cfg.LogFile))
-		} else {
-			fmt.Printf("[OK] %s sent to Discord\n", event.Result)
-			monitor.LogToFile("[OK] %s", logMessage)
-		}
-		if statusCode == 429 && retryAfter > 0 {
-			fmt.Printf("Rate limited, waiting %.1fs\n", retryAfter)
-			monitor.LogToFile("[RATE_LIMIT] Waiting %.1fs", retryAfter)
-			time.Sleep(time.Duration(retryAfter*1000) * time.Millisecond)
-		} else if statusCode == 429 {
-			time.Sleep(2 * time.Second)
+			break
 		}
 	}
 }

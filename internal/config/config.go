@@ -3,18 +3,22 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"strings"
 )
 
 type Config struct {
-	ServerVersion string        `json:"serverversion"`
-	Discord       DiscordConfig `json:"discord"`
-	IP            string        `json:"ip"`
-	Ports         Ports         `json:"ports"`
-	SBlock        bool          `json:"s_block"`
-	SReadType     int           `json:"s_readtype"`
-	MaxBuffer     int           `json:"maxbuffer"`
-	Version       string        `json:"version"`
-	LogFile       string        `json:"log_file"`
+	ServerVersion       string        `json:"serverversion"`
+	Discord             DiscordConfig `json:"discord"`
+	IP                  string        `json:"ip"`
+	Ports               Ports         `json:"ports"`
+	SBlock              bool          `json:"s_block"`
+	SReadType           int           `json:"s_readtype"`
+	MaxBuffer           int           `json:"maxbuffer"`
+	Version             string        `json:"version"`
+	LogFile             string        `json:"log_file"`
+	WebEnabled          *bool         `json:"web_enabled"`
+	WebAddr             string        `json:"web_addr"`
+	WebRecentBufferSize int           `json:"web_recent_buffer_size"`
 }
 
 type DiscordConfig struct {
@@ -129,4 +133,29 @@ func (d *DiscordConfig) ShouldSend(result string, levelBefore, levelAfter int) b
 	default:
 		return true
 	}
+}
+
+func (c *Config) IsWebEnabled() bool {
+	if c == nil || c.WebEnabled == nil {
+		return true
+	}
+	return *c.WebEnabled
+}
+
+func (c *Config) GetWebAddr() string {
+	if c == nil {
+		return "127.0.0.1:8080"
+	}
+	addr := strings.TrimSpace(c.WebAddr)
+	if addr == "" {
+		return "127.0.0.1:8080"
+	}
+	return addr
+}
+
+func (c *Config) GetWebRecentBufferSize() int {
+	if c == nil || c.WebRecentBufferSize <= 0 {
+		return 200
+	}
+	return c.WebRecentBufferSize
 }

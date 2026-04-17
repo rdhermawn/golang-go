@@ -1,0 +1,42 @@
+{
+    "serverversion": "151",
+    "log_file": "/home/logs/world2.log",
+    "discord": {
+        "webhook_url": "",
+        "webhook_summary": "",
+        "webhook_success": "",
+        "webhook_failure": "",
+        "webhook_reset": "",
+        "webhook_downgraded": "",
+        "footer": "Perfect World Midnight",
+        "level_filters": {
+            "success": {
+                "min_level": 1,
+                "max_level": 12
+            },
+            "failure": {
+                "min_level": 1,
+                "max_level": 12
+            },
+            "reset": {
+                "min_level": 1,
+                "max_level": 12
+            },
+            "downgraded": {
+                "min_level": 1,
+                "max_level": 12
+            }
+        }
+    },
+    "ip": "127.0.0.1",
+    "ports": {
+        "client": 29000,
+        "gamedbd": 29400,
+        "gdeliveryd": 29100,
+        "gacd": 29300
+    },
+    "s_block": false,
+    "s_readtype": 3,
+    "maxbuffer": 65536,
+    "version": "101"
+}

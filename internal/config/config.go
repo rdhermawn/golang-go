@@ -40,8 +40,16 @@ type DiscordLevelFilters struct {
 }
 
 type RefineLevelFilter struct {
-	MinLevel *int `json:"min_level"`
-	MaxLevel *int `json:"max_level"`
+	Enable   *bool `json:"enable"`
+	MinLevel *int  `json:"min_level"`
+	MaxLevel *int  `json:"max_level"`
+}
+
+func (f RefineLevelFilter) Enabled() bool {
+	if f.Enable == nil {
+		return true
+	}
+	return *f.Enable
 }
 
 type Ports struct {
@@ -111,6 +119,9 @@ func (d *DiscordConfig) GetSummaryWebhook() string {
 }
 
 func (f RefineLevelFilter) Allows(level int) bool {
+	if !f.Enabled() {
+		return false
+	}
 	if f.MinLevel != nil && level < *f.MinLevel {
 		return false
 	}

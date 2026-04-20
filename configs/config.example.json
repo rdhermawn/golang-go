@@ -1,6 +1,13 @@
 {
   "serverversion": "151",
-  "log_file": "/path/to/world2.log",
+  "log_file": "/home/logs/world2.log",
+  "format_log_path": "/home/logs/world2.formatlog",
+  "logs": {
+    "refine_log_path": "./logs/refine/monitor-log.txt",
+    "pickup_log_path": "./logs/pickup/pickup-log.txt",
+    "craft_log_path": "./logs/craft/craft-log.txt",
+    "sendmail_log_path": "./logs/sendmail/sendmail-log.txt"
+  },
   "discord": {
     "webhook_url": "",
     "webhook_summary": "",
@@ -8,6 +15,12 @@
     "webhook_failure": "",
     "webhook_reset": "",
     "webhook_downgraded": "",
+    "webhook_pickup": "",
+    "webhook_craft": "",
+    "webhook_sendmail": "",
+    "pickup_enabled": true,
+    "craft_enabled": true,
+    "sendmail_enabled": true,
     "footer": "Perfect World Midnight",
     "level_filters": {
       "success": {
@@ -16,7 +29,7 @@
         "max_level": 12
       },
       "failure": {
-        "enable": true,
+        "enable": false,
         "min_level": 1,
         "max_level": 12
       },
@@ -44,6 +57,6 @@
   "maxbuffer": 65536,
   "version": "101",
   "web_enabled": true,
-  "web_addr": "127.0.0.1:8080",
+  "web_addr": "127.0.0.1:9090",
   "web_recent_buffer_size": 200
 }

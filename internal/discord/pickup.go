@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,67 +14,31 @@ import (
 
 	"golang-refine/internal/config"
 	"golang-refine/internal/monitor"
+	"golang-refine/internal/pickup"
 	"golang-refine/internal/refine"
 )
 
-var Client = &http.Client{
-	Timeout: 10 * time.Second,
-	Transport: &http.Transport{
-		MaxIdleConns:        10,
-		MaxIdleConnsPerHost: 10,
-		IdleConnTimeout:     30 * time.Second,
-	},
+type PickupEvent struct {
+	Sequence   int64
+	ObservedAt time.Time
+	RoleID     string
+	ItemID     string
+	Count      int
+	PlayerName string
+	ItemName   string
+	IconPath   string
 }
 
-type RefineEvent struct {
-	Sequence      int64
-	ObservedAt    time.Time
-	RoleID        string
-	ItemID        string
-	Result        string
-	LevelBefore   int
-	LevelAfter    int
-	StoneID       string
-	PlayerName    string
-	ItemName      string
-	StoneEmoticon string
-	IconPath      string
-}
-
-func DrainAndClose(resp *http.Response) {
-	if resp == nil {
-		return
-	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-}
-
-func SendEmbed(webhookURL, footer, playerName, result, itemID, itemName string, levelBefore, levelAfter int, stoneID, stoneEmoticon, iconPath string) (int, float64, error) {
-	var color int
-	switch result {
-	case "SUCCESS":
-		color = 0x00FF00
-	case "FAILURE":
-		color = 0xFF0000
-	case "RESET":
-		color = 0xFFA500
-	case "DOWNGRADED":
-		color = 0xFF4500
-	default:
-		color = 0x808080
-	}
-
-	levelText := fmt.Sprintf("+%d \u2192 +%d", levelBefore, levelAfter)
-	authorName := refine.GetItemDisplayName(itemID)
-	if levelAfter > 0 {
-		authorName = fmt.Sprintf("%s +%d", authorName, levelAfter)
-	}
+func SendPickupEmbed(webhookURL, footer, playerName, itemID, itemName string, count int, iconPath string) (int, float64, error) {
+	color := 0x00BFFF
 
 	embed := map[string]interface{}{
-		"color":  color,
-		"author": map[string]interface{}{"name": authorName},
-		"description": fmt.Sprintf("**%s** refine %s from %s using %s %s",
-			playerName, strings.ToLower(result), levelText, refine.GetStoneName(stoneID), stoneEmoticon),
+		"color": color,
+		"author": map[string]interface{}{
+			"name": pickup.GetItemDisplayName(itemID),
+		},
+		"description": fmt.Sprintf("**%s** picked up **%d** x %s",
+			playerName, count, itemName),
 		"footer":    map[string]interface{}{"text": footer},
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	}
@@ -149,22 +112,7 @@ func SendEmbed(webhookURL, footer, playerName, result, itemID, itemName string, 
 	return resp.StatusCode, 0, nil
 }
 
-func sourceFileForDiscordError(err error, event RefineEvent, logFile string) string {
-	msg := err.Error()
-	if strings.Contains(msg, "form file") || strings.Contains(msg, "icon file") {
-		if event.IconPath != "" {
-			return event.IconPath
-		}
-	}
-	if strings.TrimSpace(logFile) != "" {
-		return strings.TrimSpace(logFile)
-	}
-	return monitor.LogPath
-}
-
-func BuildRefineEvent(sequence int64, observedAt time.Time, roleID, itemID, result string, levelBefore int, stoneID string, lookupRole func(int) (string, error)) RefineEvent {
-	levelAfter := refine.CalculateLevelAfter(result, levelBefore)
-
+func BuildPickupEvent(sequence int64, observedAt time.Time, roleID, itemID string, count int, lookupRole func(int) (string, error)) PickupEvent {
 	playerName := strings.TrimSpace(roleID)
 	if playerName == "" {
 		playerName = "Unknown Player"
@@ -173,57 +121,56 @@ func BuildRefineEvent(sequence int64, observedAt time.Time, roleID, itemID, resu
 		playerName = name
 	}
 
-	itemName := refine.GetItemDisplayName(itemID)
-	materialDisplay := refine.GetStoneEmoticon(stoneID)
-	iconPath := refine.GetItemIconPath(itemID)
+	itemName := pickup.GetItemDisplayName(itemID)
+	iconPath := pickup.GetItemIconPath(itemID)
 
-	event := RefineEvent{
-		Sequence:      sequence,
-		ObservedAt:    observedAt,
-		RoleID:        roleID,
-		ItemID:        itemID,
-		Result:        result,
-		LevelBefore:   levelBefore,
-		LevelAfter:    levelAfter,
-		StoneID:       stoneID,
-		PlayerName:    playerName,
-		ItemName:      itemName,
-		StoneEmoticon: materialDisplay,
-		IconPath:      iconPath,
+	return PickupEvent{
+		Sequence:   sequence,
+		ObservedAt: observedAt,
+		RoleID:     roleID,
+		ItemID:     itemID,
+		Count:      count,
+		PlayerName: playerName,
+		ItemName:   itemName,
+		IconPath:   iconPath,
 	}
-
-	return event
 }
 
-func ProcessRefineEvent(event RefineEvent, cfg *config.Config, msgCh chan<- RefineEvent) bool {
-	if !cfg.Discord.ShouldSend(event.Result, event.LevelBefore, event.LevelAfter) {
+func ProcessPickupEvent(event PickupEvent, cfg *config.Config, msgCh chan<- PickupEvent) bool {
+	if !cfg.Discord.PickupEnabled {
 		return false
 	}
 
-	fmt.Printf("[SEND] %s **%s** %s **%s** +%d\u2192+%d %s\n",
-		refine.ResultEmojis[event.Result], event.PlayerName, event.Result, event.ItemName, event.LevelBefore, event.LevelAfter, event.StoneEmoticon)
+	fmt.Printf("[PICKUP] 🎒 **%s** picked up **%d** x %s\n",
+		event.PlayerName, event.Count, event.ItemName)
 	msgCh <- event
 	return true
 }
 
-func StartSender(cfg *config.Config, msgCh <-chan RefineEvent) {
+func StartPickupSender(cfg *config.Config, msgCh <-chan PickupEvent) {
 	const maxRateLimitWait = 60 * time.Second
 
+	webhook := cfg.Discord.GetPickupWebhook()
+	if webhook == "" {
+		webhook = cfg.Discord.GetWebhook("SUCCESS")
+	}
+	if webhook == "" {
+		fmt.Println("[PICKUP] Warning: no webhook configured for pickup events")
+	}
+
 	for event := range msgCh {
-		webhook := cfg.Discord.GetWebhook(event.Result)
 		attempt := 1
 		for {
-			statusCode, retryAfter, err := SendEmbed(
+			statusCode, retryAfter, err := SendPickupEmbed(
 				webhook, cfg.Discord.Footer,
-				event.PlayerName, event.Result, event.ItemID, event.ItemName,
-				event.LevelBefore, event.LevelAfter,
-				event.StoneID, event.StoneEmoticon, event.IconPath,
+				event.PlayerName, event.ItemID, event.ItemName,
+				event.Count, event.IconPath,
 			)
 			if err == nil {
 				if attempt > 1 {
-					fmt.Printf("[OK] %s sent to Discord after %d attempts\n", event.Result, attempt)
+					fmt.Printf("[OK] Pickup sent to Discord after %d attempts\n", attempt)
 				} else {
-					fmt.Printf("[OK] %s sent to Discord\n", event.Result)
+					fmt.Printf("[OK] Pickup sent to Discord\n")
 				}
 				break
 			}
@@ -243,7 +190,7 @@ func StartSender(cfg *config.Config, msgCh <-chan RefineEvent) {
 			}
 
 			fmt.Printf("[ERROR] %v\n", err)
-			RecordError(err.Error(), sourceFileForDiscordError(err, event, cfg.LogFile))
+			monitor.LogToFileAt(event.ObservedAt, "[ERROR] %v", err)
 			break
 		}
 	}

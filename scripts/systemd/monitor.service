@@ -9,7 +9,7 @@ WorkingDirectory=/home/golang-go
 Environment=HOME=/root
 Environment=GOPATH=/root/go
 ExecStartPre=/bin/bash /home/golang-go/scripts/build.sh
-ExecStart=/home/golang-go/refine-monitor
+ExecStart=/home/golang-go/monitor
 Restart=always
 RestartSec=3
 

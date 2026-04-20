@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,68 +13,34 @@ import (
 	"time"
 
 	"golang-refine/internal/config"
+	"golang-refine/internal/craft"
 	"golang-refine/internal/monitor"
 	"golang-refine/internal/refine"
 )
 
-var Client = &http.Client{
-	Timeout: 10 * time.Second,
-	Transport: &http.Transport{
-		MaxIdleConns:        10,
-		MaxIdleConnsPerHost: 10,
-		IdleConnTimeout:     30 * time.Second,
-	},
+type CraftEvent struct {
+	Sequence       int64
+	ObservedAt     time.Time
+	RoleID         string
+	CraftCount     int
+	CraftedItemID  string
+	MaterialItemID string
+	MaterialCount  int
+	PlayerName     string
+	CraftedItemName string
+	MaterialName   string
+	IconPath       string
 }
 
-type RefineEvent struct {
-	Sequence      int64
-	ObservedAt    time.Time
-	RoleID        string
-	ItemID        string
-	Result        string
-	LevelBefore   int
-	LevelAfter    int
-	StoneID       string
-	PlayerName    string
-	ItemName      string
-	StoneEmoticon string
-	IconPath      string
-}
-
-func DrainAndClose(resp *http.Response) {
-	if resp == nil {
-		return
-	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-}
-
-func SendEmbed(webhookURL, footer, playerName, result, itemID, itemName string, levelBefore, levelAfter int, stoneID, stoneEmoticon, iconPath string) (int, float64, error) {
-	var color int
-	switch result {
-	case "SUCCESS":
-		color = 0x00FF00
-	case "FAILURE":
-		color = 0xFF0000
-	case "RESET":
-		color = 0xFFA500
-	case "DOWNGRADED":
-		color = 0xFF4500
-	default:
-		color = 0x808080
-	}
-
-	levelText := fmt.Sprintf("+%d \u2192 +%d", levelBefore, levelAfter)
-	authorName := refine.GetItemDisplayName(itemID)
-	if levelAfter > 0 {
-		authorName = fmt.Sprintf("%s +%d", authorName, levelAfter)
-	}
+func SendCraftEmbed(webhookURL, footer, roleID, playerName, craftedItemID, craftedItemName string, craftCount int, materialItemID, materialName string, materialCount int, iconPath string) (int, float64, error) {
+	color := 0x9B59B6
 
 	embed := map[string]interface{}{
-		"color":  color,
-		"author": map[string]interface{}{"name": authorName},
-		"description": fmt.Sprintf("**%s** refine %s from %s using %s %s",
-			playerName, strings.ToLower(result), levelText, refine.GetStoneName(stoneID), stoneEmoticon),
+		"color": color,
+		"author": map[string]interface{}{
+			"name": fmt.Sprintf("%s x%d manufactured by %s",
+				craft.GetItemDisplayName(craftedItemID), craftCount, playerName),
+		},
 		"footer":    map[string]interface{}{"text": footer},
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	}
@@ -149,22 +114,7 @@ func SendEmbed(webhookURL, footer, playerName, result, itemID, itemName string, 
 	return resp.StatusCode, 0, nil
 }
 
-func sourceFileForDiscordError(err error, event RefineEvent, logFile string) string {
-	msg := err.Error()
-	if strings.Contains(msg, "form file") || strings.Contains(msg, "icon file") {
-		if event.IconPath != "" {
-			return event.IconPath
-		}
-	}
-	if strings.TrimSpace(logFile) != "" {
-		return strings.TrimSpace(logFile)
-	}
-	return monitor.LogPath
-}
-
-func BuildRefineEvent(sequence int64, observedAt time.Time, roleID, itemID, result string, levelBefore int, stoneID string, lookupRole func(int) (string, error)) RefineEvent {
-	levelAfter := refine.CalculateLevelAfter(result, levelBefore)
-
+func BuildCraftEvent(sequence int64, observedAt time.Time, roleID, craftedItemID, materialItemID string, craftCount, materialCount int, lookupRole func(int) (string, error)) CraftEvent {
 	playerName := strings.TrimSpace(roleID)
 	if playerName == "" {
 		playerName = "Unknown Player"
@@ -173,57 +123,61 @@ func BuildRefineEvent(sequence int64, observedAt time.Time, roleID, itemID, resu
 		playerName = name
 	}
 
-	itemName := refine.GetItemDisplayName(itemID)
-	materialDisplay := refine.GetStoneEmoticon(stoneID)
-	iconPath := refine.GetItemIconPath(itemID)
+	craftedItemName := craft.GetItemDisplayName(craftedItemID)
+	materialName := craft.GetItemDisplayName(materialItemID)
+	iconPath := craft.GetItemIconPath(craftedItemID)
 
-	event := RefineEvent{
-		Sequence:      sequence,
-		ObservedAt:    observedAt,
-		RoleID:        roleID,
-		ItemID:        itemID,
-		Result:        result,
-		LevelBefore:   levelBefore,
-		LevelAfter:    levelAfter,
-		StoneID:       stoneID,
-		PlayerName:    playerName,
-		ItemName:      itemName,
-		StoneEmoticon: materialDisplay,
-		IconPath:      iconPath,
+	return CraftEvent{
+		Sequence:        sequence,
+		ObservedAt:      observedAt,
+		RoleID:          roleID,
+		CraftCount:      craftCount,
+		CraftedItemID:   craftedItemID,
+		MaterialItemID:  materialItemID,
+		MaterialCount:   materialCount,
+		PlayerName:      playerName,
+		CraftedItemName: craftedItemName,
+		MaterialName:    materialName,
+		IconPath:        iconPath,
 	}
-
-	return event
 }
 
-func ProcessRefineEvent(event RefineEvent, cfg *config.Config, msgCh chan<- RefineEvent) bool {
-	if !cfg.Discord.ShouldSend(event.Result, event.LevelBefore, event.LevelAfter) {
+func ProcessCraftEvent(event CraftEvent, cfg *config.Config, msgCh chan<- CraftEvent) bool {
+	if !cfg.Discord.CraftEnabled {
 		return false
 	}
 
-	fmt.Printf("[SEND] %s **%s** %s **%s** +%d\u2192+%d %s\n",
-		refine.ResultEmojis[event.Result], event.PlayerName, event.Result, event.ItemName, event.LevelBefore, event.LevelAfter, event.StoneEmoticon)
+	fmt.Printf("[CRAFT] 🛠️ **%s** crafted **%d** x %s (used %d x %s)\n",
+		event.PlayerName, event.CraftCount, event.CraftedItemName, event.MaterialCount, event.MaterialName)
 	msgCh <- event
 	return true
 }
 
-func StartSender(cfg *config.Config, msgCh <-chan RefineEvent) {
+func StartCraftSender(cfg *config.Config, msgCh <-chan CraftEvent) {
 	const maxRateLimitWait = 60 * time.Second
 
+	webhook := cfg.Discord.GetCraftWebhook()
+	if webhook == "" {
+		webhook = cfg.Discord.GetWebhook("SUCCESS")
+	}
+	if webhook == "" {
+		fmt.Println("[CRAFT] Warning: no webhook configured for craft events")
+	}
+
 	for event := range msgCh {
-		webhook := cfg.Discord.GetWebhook(event.Result)
 		attempt := 1
 		for {
-			statusCode, retryAfter, err := SendEmbed(
+			statusCode, retryAfter, err := SendCraftEmbed(
 				webhook, cfg.Discord.Footer,
-				event.PlayerName, event.Result, event.ItemID, event.ItemName,
-				event.LevelBefore, event.LevelAfter,
-				event.StoneID, event.StoneEmoticon, event.IconPath,
+				event.RoleID, event.PlayerName, event.CraftedItemID, event.CraftedItemName,
+				event.CraftCount, event.MaterialItemID, event.MaterialName,
+				event.MaterialCount, event.IconPath,
 			)
 			if err == nil {
 				if attempt > 1 {
-					fmt.Printf("[OK] %s sent to Discord after %d attempts\n", event.Result, attempt)
+					fmt.Printf("[OK] Craft sent to Discord after %d attempts\n", attempt)
 				} else {
-					fmt.Printf("[OK] %s sent to Discord\n", event.Result)
+					fmt.Printf("[OK] Craft sent to Discord\n")
 				}
 				break
 			}
@@ -243,7 +197,7 @@ func StartSender(cfg *config.Config, msgCh <-chan RefineEvent) {
 			}
 
 			fmt.Printf("[ERROR] %v\n", err)
-			RecordError(err.Error(), sourceFileForDiscordError(err, event, cfg.LogFile))
+			monitor.LogToFileAt(event.ObservedAt, "[ERROR] %v", err)
 			break
 		}
 	}

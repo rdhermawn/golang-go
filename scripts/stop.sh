@@ -2,8 +2,8 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-PID_FILE="$PROJECT_DIR/refine-monitor.pid"
-BINARY="$PROJECT_DIR/refine-monitor"
+PID_FILE="$PROJECT_DIR/monitor.pid"
+BINARY="$PROJECT_DIR/monitor"
 
 if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")

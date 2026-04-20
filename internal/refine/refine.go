@@ -36,8 +36,6 @@ var (
 	refineRegexCorrupted = regexp.MustCompile(`(\d+)\D+?(\d+)\[([^\]]+)\]\D+?(\d+)\D+?(\d+)\D+?(-?\d+)\s*$`)
 	stripStarsRegex      = regexp.MustCompile(`^[^\p{L}\p{N}]+`)
 
-	gbkDecoder = simplifiedchinese.GBK.NewDecoder()
-
 	chineseToPortuguese = map[string]string{
 		"\u6210\u529f":                         "SUCCESS",
 		"\u6750\u6599\u6d88\u5931":             "FAILURE",
@@ -207,8 +205,8 @@ func CalculateLevelAfter(result string, levelBefore int) int {
 }
 
 func BuildRefineLogMessage(playerName, result, itemName string, levelBefore, levelAfter int, stoneID string) string {
-	message := fmt.Sprintf("%s refined %s %s from +%d -> +%d",
-		playerName, strings.ToLower(result), NormalizeItemDisplayName(itemName), levelBefore, levelAfter)
+	message := fmt.Sprintf("%s refined %s from +%d -> +%d",
+		playerName, NormalizeItemDisplayName(itemName), levelBefore, levelAfter)
 	stoneName := GetStoneName(stoneID)
 	if stoneName == "" {
 		return message
@@ -317,7 +315,8 @@ func convertChineseToPortuguese(text string) string {
 }
 
 func convertToUTF8(data []byte) string {
-	reader := transform.NewReader(bytes.NewReader(data), gbkDecoder)
+	decoder := simplifiedchinese.GBK.NewDecoder()
+	reader := transform.NewReader(bytes.NewReader(data), decoder)
 	result, err := io.ReadAll(reader)
 	if err != nil {
 		return string(data)

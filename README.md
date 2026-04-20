@@ -11,9 +11,9 @@ A background daemon written in Go (Golang) designed to monitor game log files fo
 - **Web UI**: Serves a live dashboard with recent refine events, item icons, and a streaming event feed.
 
 ## Project Structure
-- `cmd/refine-monitor/main.go`: The main entry point of the daemon.
+- `cmd/monitor/main.go`: The main entry point of the daemon.
 - `internal/`: Contains core business logic (`config`, `discord`, `game`, `monitor`, `refine`, `search`, `tail`).
-- `configs/`: Sample/default configuration files.
+- `configs/`: Tracked sample config (`config.example.json`) plus your local runtime config (`config.json`, ignored by git).
 - `scripts/`: Shell scripts (like `monitor.sh`) to manage background processes.
 - `webui/`: Embedded HTTP server and frontend assets for the live dashboard.
 
@@ -27,16 +27,22 @@ A background daemon written in Go (Golang) designed to monitor game log files fo
 To build the executable:
 
 ```bash
-go build -o refine-monitor cmd/refine-monitor/main.go
+go build -o monitor cmd/monitor/main.go
 ```
 
 To run the daemon:
 
 ```bash
-./refine-monitor
+./monitor
 ```
 
-Make sure `configs/config.json` is correctly set up with the correct log file and webhook/API settings before running. When Web UI is enabled, the dashboard is served from `http://127.0.0.1:8080` by default.
+Before the first run, create your local config from the tracked example:
+
+```bash
+cp configs/config.example.json configs/config.json
+```
+
+Make sure `configs/config.json` is correctly set up with the correct log file and webhook/API settings before running. The local `config.json` is ignored by git so secrets and machine-specific paths stay out of the repo. When Web UI is enabled, the dashboard is served from `http://127.0.0.1:8080` by default.
 
 Optional Web UI settings in `configs/config.json`:
 
@@ -61,5 +67,5 @@ If `web_addr` is already occupied, pick a different local port such as `127.0.0.
 To run a search for past refines directly:
 
 ```bash
-./refine-monitor search-refine <search_args>
+./monitor search-refine <search_args>
 ```

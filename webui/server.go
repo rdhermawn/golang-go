@@ -28,6 +28,15 @@ func NewHandler(hub *Hub) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(payload)
 	})
+	mux.HandleFunc("/api/events/all", func(w http.ResponseWriter, _ *http.Request) {
+		payload, err := hub.AllJSON()
+		if err != nil {
+			http.Error(w, "failed to encode events", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(payload)
+	})
 	mux.HandleFunc("/api/events/stream", hub.serveStream)
 	mux.HandleFunc("/api/icons/", serveItemIcon)
 	mux.Handle("/", serveFrontendAssets(frontendFS()))

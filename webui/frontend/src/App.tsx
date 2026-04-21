@@ -412,6 +412,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>("refine");
   const [connection, setConnection] = useState<"loading" | "live" | "reconnecting">("loading");
   const [loadError, setLoadError] = useState("");
+  const [reloadStatus, setReloadStatus] = useState("");
   const deferredQuery = useDeferredValue(query);
 
   useEffect(() => {
@@ -526,6 +527,28 @@ export default function App() {
           }}
         >
           Sendmail
+        </button>
+        <div className="tab-bar-spacer" />
+        <button
+          type="button"
+          className="tab tab-reload"
+          title="Reload config"
+          onClick={async () => {
+            setReloadStatus("Reloading...");
+            try {
+              const res = await fetch("/api/reload", { method: "POST" });
+              if (res.ok) {
+                setReloadStatus("Config reloaded");
+              } else {
+                setReloadStatus("Reload failed");
+              }
+            } catch {
+              setReloadStatus("Reload failed");
+            }
+            setTimeout(() => setReloadStatus(""), 2000);
+          }}
+        >
+          {reloadStatus || "Reload Config"}
         </button>
       </nav>
 

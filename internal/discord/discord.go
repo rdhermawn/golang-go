@@ -195,8 +195,8 @@ func BuildRefineEvent(sequence int64, observedAt time.Time, roleID, itemID, resu
 	return event
 }
 
-func ProcessRefineEvent(event RefineEvent, cfg *config.Config, msgCh chan<- RefineEvent) bool {
-	if !cfg.Discord.ShouldSend(event.Result, event.LevelBefore, event.LevelAfter) {
+func ProcessRefineEvent(event RefineEvent, msgCh chan<- RefineEvent) bool {
+	if !config.Current().Discord.ShouldSend(event.Result, event.LevelBefore, event.LevelAfter) {
 		return false
 	}
 
@@ -206,10 +206,11 @@ func ProcessRefineEvent(event RefineEvent, cfg *config.Config, msgCh chan<- Refi
 	return true
 }
 
-func StartSender(cfg *config.Config, msgCh <-chan RefineEvent) {
+func StartSender(msgCh <-chan RefineEvent) {
 	const maxRateLimitWait = 60 * time.Second
 
 	for event := range msgCh {
+		cfg := config.Current()
 		webhook := cfg.Discord.GetWebhook(event.Result)
 		attempt := 1
 		for {

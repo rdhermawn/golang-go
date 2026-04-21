@@ -33,7 +33,6 @@ func processSendmailEvent(
 	api *apiClient,
 	sendmailLogger *monitor.Logger,
 	hub *webui.Hub,
-	cfg *config.Config,
 	sendmailCh chan<- discord.SendmailEvent,
 ) {
 	event := discord.BuildSendmailEvent(
@@ -56,8 +55,10 @@ func processSendmailEvent(
 	if sendmailLogger != nil {
 		sendmailLogger.LogAt(event.ObservedAt, "[SENDMAIL] %s", message)
 	}
-	hub.Publish(webui.NewSendmailEvent(event))
-	discord.ProcessSendmailEvent(event, cfg, sendmailCh)
+	if event.Money > 0 {
+		hub.Publish(webui.NewSendmailEvent(event))
+	}
+	discord.ProcessSendmailEvent(event, sendmailCh)
 }
 
 func handleSendmailLine(
@@ -66,10 +67,9 @@ func handleSendmailLine(
 	api *apiClient,
 	sendmailLogger *monitor.Logger,
 	hub *webui.Hub,
-	cfg *config.Config,
 	sendmailCh chan<- discord.SendmailEvent,
 ) bool {
-	if !cfg.Discord.SendmailEnabled {
+	if !config.Current().Discord.SendmailEnabled {
 		return false
 	}
 
@@ -84,6 +84,6 @@ func handleSendmailLine(
 		observedAt = parsedTimestamp
 	}
 
-	processSendmailEvent(parsed, currentSequence, observedAt, api, sendmailLogger, hub, cfg, sendmailCh)
+	processSendmailEvent(parsed, currentSequence, observedAt, api, sendmailLogger, hub, sendmailCh)
 	return true
 }

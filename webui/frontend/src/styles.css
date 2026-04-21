@@ -214,6 +214,22 @@
   color: #ffffff;
 }
 
+.tab-bar-spacer {
+  flex: 1 1 auto;
+}
+
+.tab-reload {
+  font-size: 0.8rem;
+  padding: 0 14px;
+  background: hsl(145 47% 50% / 0.15);
+  color: hsl(145 60% 60%);
+}
+
+.tab-reload:hover {
+  background: hsl(145 47% 50% / 0.28);
+  color: hsl(145 70% 70%);
+}
+
 @media (max-width: 640px) {
   .app-shell {
     padding: 16px 10px 28px;

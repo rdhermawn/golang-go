@@ -657,6 +657,9 @@ func ParseSendmailLogLine(sequence int64, line string) (FeedEvent, bool) {
 	if !ok {
 		return FeedEvent{}, false
 	}
+	if money == 0 {
+		return FeedEvent{}, false
+	}
 	itemID := refine.LookupItemIDByName(itemName)
 	iconURL := ""
 	if itemID != "" && refine.GetItemIconPath(itemID) != "" {

@@ -180,7 +180,7 @@ func sendHourlySummary(webhookURL, footer string, snapshot errorSnapshot) error 
 	return nil
 }
 
-func StartHourlySummary(cfg *config.Config, done <-chan struct{}) {
+func StartHourlySummary(done <-chan struct{}) {
 	for {
 		nextHour := time.Now().Truncate(time.Hour).Add(time.Hour)
 		select {
@@ -192,6 +192,7 @@ func StartHourlySummary(cfg *config.Config, done <-chan struct{}) {
 		if snapshot.TotalCount == 0 {
 			continue
 		}
+		cfg := config.Current()
 		if err := sendHourlySummary(cfg.Discord.GetSummaryWebhook(), cfg.Discord.Footer, snapshot); err != nil {
 			fmt.Printf("[ERROR] failed to send hourly error summary: %v\n", err)
 			continue

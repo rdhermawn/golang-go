@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 )
+
+var current atomic.Pointer[Config]
 
 type Config struct {
 	ServerVersion       string        `json:"serverversion"`
@@ -22,6 +25,7 @@ type Config struct {
 	WebEnabled          *bool         `json:"web_enabled"`
 	WebAddr             string        `json:"web_addr"`
 	WebRecentBufferSize int           `json:"web_recent_buffer_size"`
+	LogRetentionDays    int           `json:"log_retention_days"`
 }
 
 type LogsConfig struct {
@@ -84,7 +88,20 @@ func Load(path string) (*Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
+	current.Store(&cfg)
 	return &cfg, nil
+}
+
+func Reload(path string) error {
+	_, err := Load(path)
+	return err
+}
+
+func Current() *Config {
+	if cfg := current.Load(); cfg != nil {
+		return cfg
+	}
+	return &Config{}
 }
 
 func (d *DiscordConfig) GetWebhook(result string) string {

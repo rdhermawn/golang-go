@@ -29,7 +29,6 @@ func processRefineEvent(
 	api *apiClient,
 	refineLogger *monitor.Logger,
 	hub *webui.Hub,
-	cfg *config.Config,
 	msgCh chan<- discord.RefineEvent,
 ) {
 	refine.WorkerSem <- struct{}{}
@@ -54,9 +53,9 @@ func processRefineEvent(
 			event.LevelAfter,
 			event.StoneID,
 		))
-		if cfg.Discord.ShouldSend(event.Result, event.LevelBefore, event.LevelAfter) {
+		if config.Current().Discord.ShouldSend(event.Result, event.LevelBefore, event.LevelAfter) {
 			hub.Publish(webui.NewFeedEvent(event))
-			discord.ProcessRefineEvent(event, cfg, msgCh)
+			discord.ProcessRefineEvent(event, msgCh)
 		}
 	}(parsed, sequence, observedAt)
 }
@@ -67,7 +66,6 @@ func handleRefineLine(
 	api *apiClient,
 	refineLogger *monitor.Logger,
 	hub *webui.Hub,
-	cfg *config.Config,
 	msgCh chan<- discord.RefineEvent,
 ) bool {
 	parsed, match := refine.ParseRefineLine(rawLine)
@@ -81,6 +79,6 @@ func handleRefineLine(
 		observedAt = parsedTimestamp
 	}
 
-	processRefineEvent(parsed, currentSequence, observedAt, api, refineLogger, hub, cfg, msgCh)
+	processRefineEvent(parsed, currentSequence, observedAt, api, refineLogger, hub, msgCh)
 	return true
 }

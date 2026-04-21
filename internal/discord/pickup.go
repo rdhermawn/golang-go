@@ -136,8 +136,8 @@ func BuildPickupEvent(sequence int64, observedAt time.Time, roleID, itemID strin
 	}
 }
 
-func ProcessPickupEvent(event PickupEvent, cfg *config.Config, msgCh chan<- PickupEvent) bool {
-	if !cfg.Discord.PickupEnabled {
+func ProcessPickupEvent(event PickupEvent, msgCh chan<- PickupEvent) bool {
+	if !config.Current().Discord.PickupEnabled {
 		return false
 	}
 
@@ -147,18 +147,20 @@ func ProcessPickupEvent(event PickupEvent, cfg *config.Config, msgCh chan<- Pick
 	return true
 }
 
-func StartPickupSender(cfg *config.Config, msgCh <-chan PickupEvent) {
+func StartPickupSender(msgCh <-chan PickupEvent) {
 	const maxRateLimitWait = 60 * time.Second
 
-	webhook := cfg.Discord.GetPickupWebhook()
-	if webhook == "" {
-		webhook = cfg.Discord.GetWebhook("SUCCESS")
-	}
-	if webhook == "" {
-		fmt.Println("[PICKUP] Warning: no webhook configured for pickup events")
-	}
-
 	for event := range msgCh {
+		cfg := config.Current()
+		webhook := cfg.Discord.GetPickupWebhook()
+		if webhook == "" {
+			webhook = cfg.Discord.GetWebhook("SUCCESS")
+		}
+		if webhook == "" {
+			fmt.Println("[PICKUP] Warning: no webhook configured for pickup events")
+			continue
+		}
+
 		attempt := 1
 		for {
 			statusCode, retryAfter, err := SendPickupEmbed(

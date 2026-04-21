@@ -33,7 +33,6 @@ func processCraftEvent(
 	api *apiClient,
 	craftLogger *monitor.Logger,
 	hub *webui.Hub,
-	cfg *config.Config,
 	craftCh chan<- discord.CraftEvent,
 ) {
 	event := discord.BuildCraftEvent(
@@ -51,7 +50,7 @@ func processCraftEvent(
 			event.CraftedItemName, event.CraftCount, event.PlayerName)
 	}
 	hub.Publish(webui.NewCraftEvent(event))
-	discord.ProcessCraftEvent(event, cfg, craftCh)
+	discord.ProcessCraftEvent(event, craftCh)
 }
 
 func handleCraftLine(
@@ -60,10 +59,9 @@ func handleCraftLine(
 	api *apiClient,
 	craftLogger *monitor.Logger,
 	hub *webui.Hub,
-	cfg *config.Config,
 	craftCh chan<- discord.CraftEvent,
 ) bool {
-	if !cfg.Discord.CraftEnabled {
+	if !config.Current().Discord.CraftEnabled {
 		return false
 	}
 
@@ -78,6 +76,6 @@ func handleCraftLine(
 		observedAt = parsedTimestamp
 	}
 
-	processCraftEvent(parsed, currentSequence, observedAt, api, craftLogger, hub, cfg, craftCh)
+	processCraftEvent(parsed, currentSequence, observedAt, api, craftLogger, hub, craftCh)
 	return true
 }

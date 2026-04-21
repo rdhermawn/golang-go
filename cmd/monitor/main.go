@@ -77,6 +77,23 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	sighupCh := make(chan os.Signal, 1)
+	signal.Notify(sighupCh, syscall.SIGHUP)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-sighupCh:
+				if err := config.Reload("./configs/config.json"); err != nil {
+					fmt.Fprintf(os.Stderr, "[RELOAD] failed to reload config: %v\n", err)
+				} else {
+					fmt.Println("[RELOAD] config reloaded successfully")
+				}
+			}
+		}
+	}()
+
 	api := NewAPIClient(cfg)
 	gameLogFile := strings.TrimSpace(cfg.LogFile)
 	if gameLogFile == "" {
@@ -174,11 +191,20 @@ func run() error {
 	if sendmailLogger != nil {
 		go sendmailLogger.StartRotation(ctx.Done())
 	}
-	go discord.StartHourlySummary(cfg, ctx.Done())
-	go discord.StartSender(cfg, msgCh)
-	go discord.StartPickupSender(cfg, pickupCh)
-	go discord.StartCraftSender(cfg, craftCh)
-	go discord.StartSendmailSender(cfg, sendmailCh)
+
+	logDirs := []string{
+		filepath.Dir(cfg.GetRefineLogPath()),
+		filepath.Dir(cfg.GetPickupLogPath()),
+		filepath.Dir(cfg.GetCraftLogPath()),
+		filepath.Dir(cfg.GetSendmailLogPath()),
+	}
+	go monitor.StartRetentionCleaner(logDirs, func() int { return config.Current().LogRetentionDays }, ctx.Done())
+
+	go discord.StartHourlySummary(ctx.Done())
+	go discord.StartSender(msgCh)
+	go discord.StartPickupSender(pickupCh)
+	go discord.StartCraftSender(craftCh)
+	go discord.StartSendmailSender(sendmailCh)
 	go tail.Start(gameLogFile, lineCh, ctx.Done())
 	if formatLogFile != "" {
 		go tail.Start(formatLogFile, formatLineCh, ctx.Done())
@@ -186,7 +212,7 @@ func run() error {
 
 	fmt.Println("Monitoring refines...")
 
-	return runEventLoop(ctx, lineCh, formatLineCh, msgCh, pickupCh, craftCh, sendmailCh, cfg, api, refineLogger, pickupLogger, craftLogger, sendmailLogger, hub, lastSequence)
+	return runEventLoop(ctx, lineCh, formatLineCh, msgCh, pickupCh, craftCh, sendmailCh, api, refineLogger, pickupLogger, craftLogger, sendmailLogger, hub, lastSequence)
 }
 
 func runEventLoop(
@@ -197,7 +223,6 @@ func runEventLoop(
 	pickupCh chan<- discord.PickupEvent,
 	craftCh chan<- discord.CraftEvent,
 	sendmailCh chan<- discord.SendmailEvent,
-	cfg *config.Config,
 	api *apiClient,
 	refineLogger *monitor.Logger,
 	pickupLogger *monitor.Logger,
@@ -222,18 +247,18 @@ func runEventLoop(
 			if !ok {
 				return nil
 			}
-			if handleRefineLine(rawLine, &sequence, api, refineLogger, hub, cfg, msgCh) {
+			if handleRefineLine(rawLine, &sequence, api, refineLogger, hub, msgCh) {
 				continue
 			}
-			if handlePickupLine(rawLine, &sequence, api, pickupLogger, hub, cfg, pickupCh) {
+			if handlePickupLine(rawLine, &sequence, api, pickupLogger, hub, pickupCh) {
 				continue
 			}
-			handleCraftLine(rawLine, &sequence, api, craftLogger, hub, cfg, craftCh)
+			handleCraftLine(rawLine, &sequence, api, craftLogger, hub, craftCh)
 		case rawLine, ok := <-formatLineCh:
 			if !ok {
 				return nil
 			}
-			if handleSendmailLine(rawLine, &sequence, api, sendmailLogger, hub, cfg, sendmailCh) {
+			if handleSendmailLine(rawLine, &sequence, api, sendmailLogger, hub, sendmailCh) {
 				continue
 			}
 		}

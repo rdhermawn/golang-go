@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"golang-refine/internal/config"
 	"golang-refine/internal/refine"
 )
 
@@ -38,6 +39,18 @@ func NewHandler(hub *Hub) http.Handler {
 		w.Write(payload)
 	})
 	mux.HandleFunc("/api/events/stream", hub.serveStream)
+	mux.HandleFunc("/api/reload", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := config.Reload("./configs/config.json"); err != nil {
+			http.Error(w, fmt.Sprintf("reload failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "config reloaded"})
+	})
 	mux.HandleFunc("/api/icons/", serveItemIcon)
 	mux.Handle("/", serveFrontendAssets(frontendFS()))
 	return mux

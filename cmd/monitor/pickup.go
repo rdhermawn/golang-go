@@ -33,7 +33,6 @@ func processPickupEvent(
 	api *apiClient,
 	pickupLogger *monitor.Logger,
 	hub *webui.Hub,
-	cfg *config.Config,
 	pickupCh chan<- discord.PickupEvent,
 ) {
 	event := discord.BuildPickupEvent(
@@ -49,7 +48,7 @@ func processPickupEvent(
 			event.PlayerName, event.Count, event.ItemName)
 	}
 	hub.Publish(webui.NewPickupEvent(event))
-	discord.ProcessPickupEvent(event, cfg, pickupCh)
+	discord.ProcessPickupEvent(event, pickupCh)
 }
 
 func handlePickupLine(
@@ -58,10 +57,9 @@ func handlePickupLine(
 	api *apiClient,
 	pickupLogger *monitor.Logger,
 	hub *webui.Hub,
-	cfg *config.Config,
 	pickupCh chan<- discord.PickupEvent,
 ) bool {
-	if !cfg.Discord.PickupEnabled {
+	if !config.Current().Discord.PickupEnabled {
 		return false
 	}
 
@@ -76,6 +74,6 @@ func handlePickupLine(
 		observedAt = parsedTimestamp
 	}
 
-	processPickupEvent(parsed, currentSequence, observedAt, api, pickupLogger, hub, cfg, pickupCh)
+	processPickupEvent(parsed, currentSequence, observedAt, api, pickupLogger, hub, pickupCh)
 	return true
 }

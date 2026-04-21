@@ -166,8 +166,8 @@ func BuildSendmailEvent(sequence int64, observedAt time.Time, srcRoleID, dstRole
 	}
 }
 
-func ProcessSendmailEvent(event SendmailEvent, cfg *config.Config, msgCh chan<- SendmailEvent) bool {
-	if !cfg.Discord.SendmailEnabled {
+func ProcessSendmailEvent(event SendmailEvent, msgCh chan<- SendmailEvent) bool {
+	if !config.Current().Discord.SendmailEnabled {
 		return false
 	}
 
@@ -177,18 +177,20 @@ func ProcessSendmailEvent(event SendmailEvent, cfg *config.Config, msgCh chan<- 
 	return true
 }
 
-func StartSendmailSender(cfg *config.Config, msgCh <-chan SendmailEvent) {
+func StartSendmailSender(msgCh <-chan SendmailEvent) {
 	const maxRateLimitWait = 60 * time.Second
 
-	webhook := cfg.Discord.GetSendmailWebhook()
-	if webhook == "" {
-		webhook = cfg.Discord.GetWebhook("SUCCESS")
-	}
-	if webhook == "" {
-		fmt.Println("[SENDMAIL] Warning: no webhook configured for sendmail events")
-	}
-
 	for event := range msgCh {
+		cfg := config.Current()
+		webhook := cfg.Discord.GetSendmailWebhook()
+		if webhook == "" {
+			webhook = cfg.Discord.GetWebhook("SUCCESS")
+		}
+		if webhook == "" {
+			fmt.Println("[SENDMAIL] Warning: no webhook configured for sendmail events")
+			continue
+		}
+
 		attempt := 1
 		for {
 			statusCode, retryAfter, err := SendSendmailEmbed(

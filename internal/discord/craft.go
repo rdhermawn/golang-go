@@ -142,8 +142,8 @@ func BuildCraftEvent(sequence int64, observedAt time.Time, roleID, craftedItemID
 	}
 }
 
-func ProcessCraftEvent(event CraftEvent, cfg *config.Config, msgCh chan<- CraftEvent) bool {
-	if !cfg.Discord.CraftEnabled {
+func ProcessCraftEvent(event CraftEvent, msgCh chan<- CraftEvent) bool {
+	if !config.Current().Discord.CraftEnabled {
 		return false
 	}
 
@@ -153,18 +153,20 @@ func ProcessCraftEvent(event CraftEvent, cfg *config.Config, msgCh chan<- CraftE
 	return true
 }
 
-func StartCraftSender(cfg *config.Config, msgCh <-chan CraftEvent) {
+func StartCraftSender(msgCh <-chan CraftEvent) {
 	const maxRateLimitWait = 60 * time.Second
 
-	webhook := cfg.Discord.GetCraftWebhook()
-	if webhook == "" {
-		webhook = cfg.Discord.GetWebhook("SUCCESS")
-	}
-	if webhook == "" {
-		fmt.Println("[CRAFT] Warning: no webhook configured for craft events")
-	}
-
 	for event := range msgCh {
+		cfg := config.Current()
+		webhook := cfg.Discord.GetCraftWebhook()
+		if webhook == "" {
+			webhook = cfg.Discord.GetWebhook("SUCCESS")
+		}
+		if webhook == "" {
+			fmt.Println("[CRAFT] Warning: no webhook configured for craft events")
+			continue
+		}
+
 		attempt := 1
 		for {
 			statusCode, retryAfter, err := SendCraftEmbed(

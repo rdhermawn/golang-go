@@ -6,7 +6,7 @@ set -e
 # Supports: Debian/Ubuntu and CentOS/RHEL
 # ============================================================
 
-DOMAIN="logs.fordivepw.com"
+DOMAIN="logs.pwmoonlight.com"
 PROJECT_DIR="/home/golang-go"
 LOG_FILE="/home/logs/world2.log"
 WEB_ADDR="127.0.0.1:9090"
@@ -168,7 +168,7 @@ else
 fi
 
 # ============================================================
-# Step 6: Deploy Apache Virtual Host (HTTP-only first, SSL added by certbot)
+# Step 6: Deploy Apache Virtual Host
 # ============================================================
 log_info "Deploying Apache virtual host for $DOMAIN..."
 APACHE_CONF="$APACHE_SITES/${DOMAIN}.conf"
@@ -176,39 +176,47 @@ APACHE_CONF="$APACHE_SITES/${DOMAIN}.conf"
 # Remove existing config if any
 rm -f "$APACHE_CONF"
 
-# Deploy HTTP-only config first (certbot will add SSL block)
+# Remove any old certbot-generated configs
+rm -f "$APACHE_DIR/sites-enabled/${DOMAIN}-le-ssl.conf" 2>/dev/null || true
+rm -f "$APACHE_SITES/${DOMAIN}-le-ssl.conf" 2>/dev/null || true
+
 cat > "$APACHE_CONF" << APACHE_EOF
 <VirtualHost *:80>
     ServerName $DOMAIN
 
-    DocumentRoot /var/www/html
-
-    ProxyPreserveHost On
-    ProxyRequests Off
-
-    RequestHeader set X-Forwarded-Proto "http"
-    RequestHeader set X-Forwarded-Port "80"
-
-    ProxyPass /api/events/stream http://127.0.0.1:9090/api/events/stream retry=0 timeout=600 keepalive=On
-    ProxyPassReverse /api/events/stream http://127.0.0.1:9090/api/events/stream
-
-    ProxyPass / http://127.0.0.1:9090/ retry=0 timeout=60 keepalive=On
-    ProxyPassReverse / http://127.0.0.1:9090/
-
-    ErrorLog ${APACHE_LOG_DIR}/${DOMAIN}-error.log
-    CustomLog ${APACHE_LOG_DIR}/${DOMAIN}-access.log combined
+    RewriteEngine On
+    RewriteRule ^/?(.*)$ https://$DOMAIN/\$1 [R=301,L]
 </VirtualHost>
+
+<IfModule mod_ssl.c>
+    <VirtualHost *:443>
+        ServerName $DOMAIN
+
+        SSLEngine on
+        SSLCertificateFile /etc/letsencrypt/live/$DOMAIN/fullchain.pem
+        SSLCertificateKeyFile /etc/letsencrypt/live/$DOMAIN/privkey.pem
+
+        ProxyPreserveHost On
+        ProxyRequests Off
+        SSLProxyEngine On
+
+        RequestHeader set X-Forwarded-Proto "https"
+        RequestHeader set X-Forwarded-Port "443"
+
+        ProxyPass /api/events/stream http://127.0.0.1:9090/api/events/stream retry=0 timeout=600 keepalive=On
+        ProxyPassReverse /api/events/stream http://127.0.0.1:9090/api/events/stream
+
+        ProxyPass / http://127.0.0.1:9090/ retry=0 timeout=60 keepalive=On
+        ProxyPassReverse / http://127.0.0.1:9090/
+
+        ErrorLog \${APACHE_LOG_DIR}/${DOMAIN}-error.log
+        CustomLog \${APACHE_LOG_DIR}/${DOMAIN}-access.log combined
+    </VirtualHost>
+</IfModule>
 APACHE_EOF
 
-if is_debian; then
-    # Remove old symlink if exists
-    rm -f "$APACHE_DIR/sites-enabled/${DOMAIN}.conf"
-    # Remove any existing SSL config for this domain
-    rm -f "$APACHE_DIR/sites-enabled/${DOMAIN}-le-ssl.conf"
-    rm -f "$APACHE_SITES/${DOMAIN}-le-ssl.conf"
-    a2ensite "${DOMAIN}.conf" 2>/dev/null || true
-fi
-log_success "Apache virtual host deployed (HTTP): $APACHE_CONF"
+# Site will be enabled after SSL certificate is obtained
+log_success "Apache virtual host deployed: $APACHE_CONF"
 
 # ============================================================
 # Step 7: Build Go binary
@@ -293,41 +301,50 @@ else
 fi
 
 # ============================================================
-# Step 11: Start Apache (HTTP-only first)
+# Step 11: Enable Apache service
 # ============================================================
-log_info "Starting Apache (HTTP)..."
+log_info "Enabling Apache service..."
 systemctl enable "$APACHE_SERVICE"
-systemctl restart "$APACHE_SERVICE"
-log_success "Apache started"
+# Don't start yet - SSL certificate is not ready
+log_success "Apache service enabled"
 
 # ============================================================
 # Step 12: SSL Certificate (Certbot)
 # ============================================================
 log_info "Requesting SSL certificate for $DOMAIN..."
-log_warn "Certbot will prompt for email and TOS agreement"
-echo ""
-certbot --apache \
+
+# Stop Apache to free port 80 for standalone certbot
+systemctl stop "$APACHE_SERVICE" 2>/dev/null || true
+
+certbot certonly --standalone \
     --non-interactive \
     --agree-tos \
     --email "$LETSENCRYPT_EMAIL" \
-    -d "$DOMAIN" \
-    --redirect || {
-        log_warn "Certbot failed or certificate already exists"
-        log_info "You can run manually: certbot --apache -d $DOMAIN"
-    }
-echo ""
-log_success "SSL certificate processed"
+    -d "$DOMAIN" || true
+
+# Verify certificate was obtained
+if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    log_error "SSL certificate was not obtained for $DOMAIN"
+    log_info "You can request it manually with:"
+    log_info "  certbot certonly --standalone -d $DOMAIN"
+    exit 1
+fi
+
+log_success "SSL certificate obtained"
 
 # ============================================================
-# Step 13: Verify Apache with SSL
+# Step 13: Enable site and start Apache
 # ============================================================
-log_info "Verifying Apache config..."
-systemctl restart "$APACHE_SERVICE" || {
-    log_error "Apache failed to restart after certbot"
-    log_info "Check: journalctl -xeu $APACHE_SERVICE"
+log_info "Starting Apache with SSL configuration..."
+if is_debian; then
+    a2ensite "${DOMAIN}.conf" 2>/dev/null || true
+fi
+
+if ! systemctl restart "$APACHE_SERVICE"; then
+    log_error "Apache failed to start. Check configuration: $APACHE_CONF"
     exit 1
-}
-log_success "Apache running with SSL"
+fi
+log_success "Apache started"
 
 # ============================================================
 # Step 14: Start monitor service

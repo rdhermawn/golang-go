@@ -6,7 +6,7 @@ set -e
 # Supports: Debian/Ubuntu and CentOS/RHEL
 # ============================================================
 
-DOMAIN="logs.fordivepw.com"
+DOMAIN="logs.pwmoonlight.com"
 PROJECT_DIR="/home/golang-go"
 LOG_FILE="/home/logs/world2.log"
 WEB_ADDR="127.0.0.1:9090"
@@ -208,9 +208,7 @@ cat > "$APACHE_CONF" << APACHE_EOF
 </IfModule>
 APACHE_EOF
 
-if is_debian; then
-    a2ensite "${DOMAIN}.conf" 2>/dev/null || true
-fi
+# Site will be enabled after SSL certificate is obtained
 log_success "Apache virtual host deployed: $APACHE_CONF"
 
 # ============================================================
@@ -296,33 +294,53 @@ else
 fi
 
 # ============================================================
-# Step 11: Start Apache
+# Step 11: Enable Apache service
 # ============================================================
-log_info "Starting Apache..."
+log_info "Enabling Apache service..."
 systemctl enable "$APACHE_SERVICE"
-systemctl restart "$APACHE_SERVICE"
-log_success "Apache started"
+# Don't start yet - SSL certificate is not ready
+log_success "Apache service enabled"
 
 # ============================================================
 # Step 12: SSL Certificate (Certbot)
 # ============================================================
 log_info "Requesting SSL certificate for $DOMAIN..."
-log_warn "Certbot will prompt for email and TOS agreement"
-echo ""
-certbot --apache \
+
+# Stop Apache to free port 80 for standalone certbot
+systemctl stop "$APACHE_SERVICE" 2>/dev/null || true
+
+certbot certonly --standalone \
     --non-interactive \
     --agree-tos \
     --email "$LETSENCRYPT_EMAIL" \
-    -d "$DOMAIN" \
-    --redirect || {
-        log_warn "Certbot failed or certificate already exists"
-        log_info "You can run manually: certbot --apache -d $DOMAIN"
-    }
-echo ""
-log_success "SSL certificate processed"
+    -d "$DOMAIN" || true
+
+# Verify certificate was obtained
+if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    log_error "SSL certificate was not obtained for $DOMAIN"
+    log_info "You can request it manually with:"
+    log_info "  certbot certonly --standalone -d $DOMAIN"
+    exit 1
+fi
+
+log_success "SSL certificate obtained"
 
 # ============================================================
-# Step 13: Start monitor service
+# Step 13: Enable site and start Apache
+# ============================================================
+log_info "Starting Apache with SSL configuration..."
+if is_debian; then
+    a2ensite "${DOMAIN}.conf" 2>/dev/null || true
+fi
+
+if ! systemctl restart "$APACHE_SERVICE"; then
+    log_error "Apache failed to start. Check configuration: $APACHE_CONF"
+    exit 1
+fi
+log_success "Apache started"
+
+# ============================================================
+# Step 14: Start monitor service
 # ============================================================
 log_info "Starting monitor service..."
 systemctl enable monitor
